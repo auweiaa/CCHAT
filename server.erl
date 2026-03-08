@@ -1,6 +1,7 @@
 -module(server).
 -export([start/1,stop/1]).
 
+
 % Start a new server process with the given name
 % Do not change the signature of this function.
 start(ServerAtom) ->
@@ -9,14 +10,9 @@ start(ServerAtom) ->
     % - Register this process to ServerAtom
     % - Return the process ID
     
-    case whereis(ServerAtom) of
-        undefined ->
-                    ServerPid = spawn(fun() -> msgLoop() end),
-                    true = register(ServerAtom, ServerPid),
-                    ServerPid;
+    Pid = genserver:start(ServerAtom, initState, fun handler/2),
+    Pid.
 
-        _Pid -> {error, already_exists}
-    end.
 
 
 % Stop the server process registered to the given name,
@@ -26,8 +22,10 @@ stop(ServerAtom) ->
     % Return ok
     not_implemented.
 
-%ToDo: implement handling of incoming messages:
-msgLoop() ->
-    receive
-        _ -> io:format("New Message~n")
-    end, msgLoop().
+%ToDo: handler methods for handling the chat:
+% - join/create channel
+% - leave channel
+% 
+
+handler(State, join_channel) -> ok.
+    %{reply, Result, NewState}.
