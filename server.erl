@@ -1,12 +1,11 @@
 -module(server).
 -export([start/1,stop/1]).
--export([joinChannel/1, leaveChannel/1]).
+-export([joinChannel/3, leaveChannel/3]).
 
 % Start a new server process with the given name
 % Do not change the signature of this function.
 start(ServerAtom) ->
-    Pid = genserver:start(ServerAtom, initState, fun handler/2),
-    Pid.
+    genserver:start(ServerAtom, [], fun handler/2).
 
 
 % Stop the server process registered to the given name,
@@ -19,11 +18,11 @@ stop(ServerAtom) ->
 % ---------------------------------------------------------
 % methods for client:
 
-joinChannel(ServerAtom) ->
-    genserver:request(ServerAtom, join_channel).
+joinChannel(ServerAtom, ChannelName, UserName) ->
+    genserver:request(ServerAtom, {join_channel, ChannelName, UserName}).
 
-leaveChannel(ServerAtom) ->
-    genserver:request(ServerAtom, join_channel).
+leaveChannel(ServerAtom, ChannelName, UserName) ->
+    genserver:request(ServerAtom, {leave_channel, ChannelName, UserName}).
 
 
 % ToDo:
