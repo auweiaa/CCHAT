@@ -1,6 +1,6 @@
 -module(server).
 -export([start/1,stop/1]).
-
+-export([joinChannel/1]).
 
 % Start a new server process with the given name
 % Do not change the signature of this function.
@@ -22,10 +22,45 @@ stop(ServerAtom) ->
     % Return ok
     not_implemented.
 
-%ToDo: handler methods for handling the chat:
-% - join/create channel
-% - leave channel
-% 
 
-handler(State, join_channel) -> ok.
-    %{reply, Result, NewState}.
+% methods for client:
+
+joinChannel(ServerAtom) ->
+    genserver:request(ServerAtom, join_channel).
+
+
+%ToDo: handler methods for handling the chat:
+% - leave channel
+
+% handler methods:
+
+handler(State, {join_channel, ChannelName, UserName}) ->
+    case findChannel(State, ChannelName) of
+        {ChannelName, UserList} ->  case isUserInChannel(UserList, UserName) of
+                                        true  -> {Result, NewState} = {user_already_joined, State};
+                                        false -> {Result, NewState} = addUserToChannel(State, {ChannelName, UserList}, UserName)
+                                    end;
+
+        empty                   ->  NewState = [ {ChannelName, [UserName]} | State],
+                                    Result = ok
+    end,
+    {reply, Result, NewState}.
+
+
+% Helper functions:
+
+findChannel([], _)                                          -> empty;
+findChannel([ {ChannelName, UserList} | _ ], ChannelName)   -> {ChannelName, UserList};
+findChannel([ _ | T], ChannelName)                          -> findChannel(T, ChannelName).
+
+
+isUserInChannel([], _)                      -> false;
+isUserInChannel([UserName | _ ], UserName)  -> true;
+isUserInChannel([ _ | T], UserName)         -> isUserInChannel(T, UserName).
+
+
+addUserToChannel(State, {ChannelName, UserList}, UserName)  ->
+    ChannelList = State -- [{ChannelName, UserList}],
+    NewList = [UserName|UserList],
+    NewState = [ {ChannelName, NewList} | ChannelList],
+    {ok, NewState}.
