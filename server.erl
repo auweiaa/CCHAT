@@ -1,6 +1,6 @@
 -module(server).
 -export([start/1,stop/1]).
--export([joinChannel/1]).
+-export([joinChannel/1, leaveChannel/1]).
 
 % Start a new server process with the given name
 % Do not change the signature of this function.
@@ -23,15 +23,17 @@ stop(ServerAtom) ->
     not_implemented.
 
 
+% ---------------------------------------------------------
 % methods for client:
 
 joinChannel(ServerAtom) ->
     genserver:request(ServerAtom, join_channel).
 
+leaveChannel(ServerAtom) ->
+    genserver:request(ServerAtom, join_channel).
 
-%ToDo: handler methods for handling the chat:
-% - leave channel
 
+% ---------------------------------------------------------
 % handler methods:
 
 handler(State, {join_channel, ChannelName, UserName}) ->
@@ -44,9 +46,21 @@ handler(State, {join_channel, ChannelName, UserName}) ->
         empty                   ->  NewState = [ {ChannelName, [UserName]} | State],
                                     Result = ok
     end,
+    {reply, Result, NewState};
+
+handler(State, {leave_channel, ChannelName, UserName}) ->
+    case findChannel(State, ChannelName) of
+        {ChannelName, UserList} ->  case isUserInChannel(UserList, UserName) of
+                                        true  -> {Result, NewState} = removeUserFromChannel(State, {ChannelName, UserList}, UserName);
+                                        false -> {Result, NewState} = {user_not_joined, State}
+                                    end;
+
+        empty                   ->  {Result, NewState} = {user_not_joined, State}
+    end,
     {reply, Result, NewState}.
 
 
+% ---------------------------------------------------------
 % Helper functions:
 
 findChannel([], _)                                          -> empty;
@@ -64,3 +78,10 @@ addUserToChannel(State, {ChannelName, UserList}, UserName)  ->
     NewList = [UserName|UserList],
     NewState = [ {ChannelName, NewList} | ChannelList],
     {ok, NewState}.
+
+
+removeUserFromChannel(State, {ChannelName, UserList}, UserName) ->
+    ChannelList = State -- [{ChannelName, UserList}],
+    NewList = UserList -- [UserName],
+    NewState = [ {ChannelName, NewList} | ChannelList],
+    {ok, NewState}. 
