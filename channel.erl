@@ -1,21 +1,40 @@
 -module(channel).
--export([create/1,join/3,leave/2]).
+-export([create/1, join/3, leave/2, changeNick/3, sendMessage/3, closeChannel/1]).
 
+
+% start and stop for server:
 
 create(ChannelName) -> 
     spawn(fun() -> loop(ChannelName, #{}) end).
 
+
+closeChannel(ChannelPid) ->
+    ChannelPid ! stop,
+    ok.
+
+% ---------------------------------------------------------
+% loop
 loop(ChannelName, State) ->
     receive
-        {join, From, Ref, ClientPid, NickName}  ->  {NewState, Result} = handle_join(State, ClientPid, NickName),
-                                                    From ! {reply, Ref, Result},
-                                                    loop(ChannelName, NewState);
+        {join, From, Ref, ClientPid, NickName}          ->  {NewState, Result} = handle_join(State, ClientPid, NickName),
+                                                            From ! {reply, Ref, Result},
+                                                            loop(ChannelName, NewState);
                                         
-        {leave, From, Ref, ClientPid}           ->  {NewState, Result} = handle_leave(State, ClientPid),
-                                                    From ! {reply, Ref, Result},
-                                                    loop(ChannelName, NewState);            
+        {leave, From, Ref, ClientPid}                   ->  {NewState, Result} = handle_leave(State, ClientPid),
+                                                            From ! {reply, Ref, Result},
+                                                            loop(ChannelName, NewState);
+
+        {msg, From, Ref, ClientPid, Msg}                -> {NewState, Result} = handle_message(State, ChannelName, ClientPid, Msg),
+                                                            From ! {reply, Ref, Result},
+                                                            loop(ChannelName, NewState);
         
-        _Other                                   ->  loop(ChannelName, State)
+        {change_nick, From, Ref, ClientPid, NickName}   ->  {NewState, Result} = handle_changeNick(State, ClientPid, NickName),
+                                                            From ! {reply, Ref, Result},
+                                                            loop(ChannelName, NewState);
+                                                
+        stop                                            -> ok;
+
+        _Other                                          ->  loop(ChannelName, State)
     end.
 
 
@@ -36,8 +55,22 @@ leave(ChannelPid, ClientPid) ->
         {reply, Ref, Result} -> Result
     end.
 
+sendMessage(ChannelPid, ClientPid, Msg) -> 
+    Ref = make_ref(),
+    ChannelPid ! {msg, self(), Ref, ClientPid, Msg},
+    receive
+        {reply, Ref, Result} -> Result
+    end.
+
+changeNick(ChannelPid, ClientPid, NickName) ->
+    Ref = make_ref(),
+    ChannelPid ! {change_nick, self(), Ref, ClientPid, NickName},
+    receive
+        {reply, Ref, Result} -> Result
+    end.
+
 % ---------------------------------------------------------
-% helper functions:
+% handle functions:
 
 handle_join(State, ClientPid, NickName) -> 
     case maps:is_key(ClientPid, State) of
@@ -48,6 +81,7 @@ handle_join(State, ClientPid, NickName) ->
                     {NewState, ok}  
     end.
 
+
 handle_leave(State, ClientPid) ->
     case maps:is_key(ClientPid, State) of
         true    ->  NewState = maps:remove(ClientPid, State), % removes if exists -> error handling in server
@@ -57,7 +91,27 @@ handle_leave(State, ClientPid) ->
                     {State, Result}
     end.
 
-handle_message() -> 
-    % ToDo:
-    ok.
-    
+
+handle_message(State, ChannelName, ClientPid, Msg) -> 
+    case maps:is_key(ClientPid, State) of
+        true    ->  broadcastMessage(State, ChannelName, ClientPid, Msg),
+                    {State, ok};
+
+        false   ->  Result = {error, user_not_joined, "not in channel"},
+                    {State, Result}
+    end.
+
+broadcastMessage(State, ChannelName, ClientPid, Msg) ->
+    SenderName = maps:get(ClientPid, State),
+    Receivers = maps:remove(ClientPid, State), % remove the sending Client
+    maps:foreach(fun(ReceiverPid, _Name) -> ReceiverPid ! {message_receive, ChannelName, SenderName, Msg} end, Receivers).
+
+
+handle_changeNick(State, ClientPid, NickName) -> 
+    case maps:is_key(ClientPid, State) of
+        true    ->  NewState = maps:put(ClientPid, NickName, State),
+                    {NewState, ok};
+
+        false   ->  Result = {error, user_not_joined, "not in channel"},
+                    {State, Result}
+    end.

@@ -11,6 +11,7 @@ start(ServerAtom) ->
 % Stop the server process registered to the given name,
 % together with any other associated processes
 stop(ServerAtom) ->
+    genserver:request(ServerAtom, stop_channel_processes),
     genserver:stop(ServerAtom),
     ok.
 
@@ -48,4 +49,10 @@ handler(State, {leave_channel, ChannelName, ClientPid}) ->
         error            -> Reply = {error, user_not_joined, "user not in channel"},
                             {reply, Reply, State}
 
-    end.
+    end;
+
+handler(State, stop_channel_processes) ->
+    maps:foreach(fun(_ChannelName, ChannelPid) -> channel:closeChannel(ChannelPid) end, State),
+    {reply, ok, State}.
+
+
