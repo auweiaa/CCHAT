@@ -6,7 +6,8 @@
 -record(client_st, {
     gui, % atom of the GUI process
     nick, % nick/username of the client
-    server % atom of the chat server
+    server, % atom of the chat server
+    channels = #{}
 }).
 
 % Return an initial state record. This is called from GUI.
@@ -26,23 +27,172 @@ initial_state(Nick, GUIAtom, ServerAtom) ->
 %   - Data is what is sent to GUI, either the atom `ok` or a tuple {error, Atom, "Error message"}
 %   - NewState is the updated state of the client
 
-% Join channel
-handle(St, {join, Channel}) ->
-    % TODO: Implement this function
-    % {reply, ok, St} ;
-    {reply, {error, not_implemented, "join not implemented"}, St} ;
+
+
+
+%client → server
+%server → returns ChannelPid
+
+
+% Join channel 
+% {reply, ok, St} ;
+
+%handle(St, {join, Channel}) ->
+handle(St = #client_st{server=Server, nick=Nick, channels=Channels}, {join, Channel}) ->
+    case maps:is_key(Channel, Channels) of
+        true ->
+            {reply, {error, user_already_joined, "already joined"}, St};
+
+        false ->
+           
+            try server:joinChannel(Server, Channel, self(), Nick) of
+                {ok, ChannelPid} ->
+                    NewChannels = maps:put(Channel, ChannelPid, Channels), %Key, Value, Map1) -> Map2
+                    {reply, ok, St#client_st{channels = NewChannels}}
+            catch
+                _:_ -> %any error type : any reason
+                    {reply, {error, server_not_reached, "server unreachable"}, St}
+            end
+    end;
+
+
+%client → channel
 
 % Leave channel
-handle(St, {leave, Channel}) ->
-    % TODO: Implement this function
+handle(St = #client_st{channels=Channels}, {leave, Channel}) ->
     % {reply, ok, St} ;
-    {reply, {error, not_implemented, "leave not implemented"}, St} ;
 
-% Sending message (from GUI, to channel)
-handle(St, {message_send, Channel, Msg}) ->
-    % TODO: Implement this function
-    % {reply, ok, St} ;
-    {reply, {error, not_implemented, "message sending not implemented"}, St} ;
+    case maps:find(Channel,Channels) of
+
+            error ->
+                {reply, {error, user_not_joined, "not joined"}, St};
+
+            {ok, ChannelPid} -> % no try and catch as sending a message can never fail
+                % ChannelPid ! {leave, self()},
+                channel:leave(ChannelPid, self()),
+                    NewChannels = maps:remove(Channel, Channels),
+                    {reply, ok, St#client_st{channels = NewChannels}}
+
+
+    end;
+
+
+
+
+
+handle(St = #client_st{server=Server, channels=Channels, nick=Nick},
+       {message_send, Channel, Msg}) ->
+
+    case maps:find(Channel, Channels) of
+
+        % Client already joined channel
+        {ok, ChannelPid} ->
+            ChannelPid ! {message, self(), Nick, Msg},
+            {reply, ok, St};
+
+        % Client not in channel
+        error ->
+            case whereis(Server) of
+
+                % Server never reached
+                undefined ->
+                    {reply, {error, server_not_reached, "server unreachable"}, St};
+
+                % Server exists but user not in channel
+                _ ->
+                    {reply, {error, user_not_joined, "user not joined"}, St}
+
+            end
+    end;
+
+
+% write_not_joined3
+
+% Error:
+
+% Expected: {error,server_not_reached,_}
+% Got: {error,user_not_joined,"user not joined"}
+
+% Scenario of the test:
+
+% Client created
+% Client sends message to channel
+% Channel has NEVER been joined
+
+% Important detail:
+
+% The client has never contacted the server yet, so the server might not exist.
+
+% Correct behavior:
+
+% Client tries to contact server
+
+% Server is unreachable
+
+% Return
+% {error, server_not_reached, ...}
+
+
+% messages_no_server2
+
+% Error:
+
+% Expected: {error,server_not_reached,_}
+% Got: ok
+
+% Scenario:
+
+% Client joins channel
+% Server stops intentionally
+% Client sends message
+
+% Expected behaviour:
+
+% Client tries to send message to server.
+
+% Server does not reply.
+
+% Client should timeout and return:
+
+% {error,server_not_reached,...}
+
+
+
+% handle(St = #client_st{server=Server, channels=Channels, nick=Nick},
+%        {message_send, Channel, Msg}) ->
+
+%     case maps:find(Channel, Channels) of
+
+%         {ok, ChannelPid} ->
+%             case whereis(Server) of
+%                 undefined ->
+%                     {reply, {error, server_not_reached, "server unreachableee"}, St};
+%                 _ ->
+%                     ChannelPid ! {message, self(), Nick, Msg},
+%                     {reply, ok, St}
+%             end;
+
+%         error ->
+%             case maps:size(Channels) of
+
+%                 0 ->
+%                     case whereis(Server) of
+%                         undefined ->
+%                             {reply, {error, server_not_reached, "server unreachable"}, St};
+%                         _ ->
+%                             {reply, {error, user_not_joined, "user not joined"}, St}
+%                     end;
+
+%                 _ ->
+%                     {reply, {error, user_not_joined, "user not joined"}, St}
+
+%             end
+%     end;
+
+
+
+
+
 
 % This case is only relevant for the distinction assignment!
 % Change nick (no check, local only)
