@@ -58,19 +58,6 @@ handle(St = #client_st{channels=Channels}, {leave, Channel}) ->
     error                   ->  {reply, {error, user_not_joined, "not in channel"}, St}
     end;
 
-% % old leave channel coordinated through server
-% handle(St = #client_st{server = Server, channels=Channels}, {leave, Channel}) ->   
-%     case catch server:leaveChannel(Server, Channel, self()) of of
-%         ok                              ->  NewChannels = maps:remove(Channel, Channels),
-%                                             {reply, ok, St#client_st{channels = NewChannels}};
-        
-%         {error, ErrorAtom , ErrorMsg}   ->  {reply, {error, ErrorAtom , ErrorMsg}, St};
-
-%         {'EXIT', _Reason}               ->  {reply, {error, server_not_reached , "server not reached"}, St};
-        
-%         timeout_error                   ->  {reply, {error, server_not_reached , "server not reached"}, St}
-%     end;
-
 
 % Sending message (from GUI, to channel)
 handle(St = #client_st{channels=Channels}, {message_send, Channel, Msg}) ->    
@@ -91,8 +78,16 @@ handle(St = #client_st{channels=Channels}, {message_send, Channel, Msg}) ->
 
 % This case is only relevant for the distinction assignment!
 % Change nick (no check, local only)
-handle(St, {nick, NewNick}) ->
-    {reply, ok, St#client_st{nick = NewNick}} ;
+handle(St = #client_st{server = Server}, {nick, NewNick}) ->
+    case catch server:changeNick(Server, self(), NewNick) of
+        ok                              ->  {reply, ok, St#client_st{nick = NewNick}};
+        
+        {error, ErrorAtom , ErrorMsg}   ->  {reply, {error, ErrorAtom , ErrorMsg}, St};
+
+        {'EXIT', _Reason}               ->  {reply, {error, server_not_reached , "server not reached"}, St};
+        
+        timeout_error                   ->  {reply, {error, server_not_reached , "server not reached"}, St}
+    end;
 
 % ---------------------------------------------------------------------------
 % The cases below do not need to be changed...
