@@ -43,7 +43,6 @@ handle(St = #client_st{server=Server, nick=Nick, channels=Channels}, {join, Chan
 % Leave channel
 handle(St = #client_st{channels=Channels}, {leave, Channel}) ->         
     case maps:find(Channel, Channels) of
-        % elp:ignore W0052 (no_catch)
         {ok, ChannelPid}    ->  case catch channel:leave(ChannelPid, self()) of
                                     ok                              ->  NewChannels = maps:remove(Channel, Channels),
                                                                         {reply, ok, St#client_st{channels = NewChannels}};
@@ -61,7 +60,6 @@ handle(St = #client_st{channels=Channels}, {leave, Channel}) ->
 
 % Sending message (from GUI, to channel)
 handle(St = #client_st{channels=Channels}, {message_send, Channel, Msg}) ->    
-    % elp:ignore W0032 (maps_find_rather_than_syntax)
     case maps:find(Channel, Channels) of
         {ok, ChannelPid} -> case catch channel:sendMessage(ChannelPid, self(), Msg) of
                                 ok                              ->  {reply, ok, St};
