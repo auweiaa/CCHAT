@@ -55,7 +55,7 @@ handle(St = #client_st{channels=Channels}, {leave, Channel}) ->
                                     timeout_error                   ->  {reply, {error, server_not_reached , "server not reached"}, St}
                                 end;
 
-    error                   ->  {reply, {error, user_not_joined, "not in channel"}, St}
+        error               ->  {reply, {error, user_not_joined, "not in channel"}, St}
     end;
 
 
