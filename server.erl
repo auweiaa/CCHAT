@@ -1,6 +1,7 @@
 -module(server).
 -export([start/1,stop/1]).
--export([joinChannel/4, leaveChannel/3]).
+-export([joinChannel/4]).
+% -export([joinChannel/4, leaveChannel/3]).
 
 % Start a new server process with the given name
 % Do not change the signature of this function.
@@ -22,8 +23,8 @@ stop(ServerAtom) ->
 joinChannel(ServerAtom, ChannelName, ClientPid, NickName) ->
     genserver:request(ServerAtom, {join_channel, ChannelName, ClientPid, NickName}).
 
-leaveChannel(ServerAtom, ChannelName, ClientPid) ->
-    genserver:request(ServerAtom, {leave_channel, ChannelName, ClientPid}).
+% leaveChannel(ServerAtom, ChannelName, ClientPid) ->
+%     genserver:request(ServerAtom, {leave_channel, ChannelName, ClientPid}).
 
 
 % ---------------------------------------------------------
@@ -42,14 +43,14 @@ handler(State, {join_channel, ChannelName, ClientPid, NickName}) ->
                             {reply, Reply, NewState}
     end;
 
-handler(State, {leave_channel, ChannelName, ClientPid}) ->
-    case maps:find(ChannelName, State) of
-        {ok, ChannelPid} -> Reply = channel:leave(ChannelPid, ClientPid), % Reply = ok or {error, errorAtom, ErrorString} -> replied to Client
-                            {reply, Reply, State};
+% handler(State, {leave_channel, ChannelName, ClientPid}) ->
+%     case maps:find(ChannelName, State) of
+%         {ok, ChannelPid} -> Reply = channel:leave(ChannelPid, ClientPid), % Reply = ok or {error, errorAtom, ErrorString} -> replied to Client
+%                             {reply, Reply, State};
 
-        error            -> Reply = {error, user_not_joined, "channel not found"},
-                            {reply, Reply, State}
-    end;
+%         error            -> Reply = {error, user_not_joined, "channel not found"},
+%                             {reply, Reply, State}
+%     end;
 
 handler(State, stop_channel_processes) ->
     maps:foreach(fun(_ChannelName, ChannelPid) -> channel:closeChannel(ChannelPid) end, State),

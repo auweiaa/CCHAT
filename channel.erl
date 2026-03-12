@@ -28,9 +28,9 @@ loop(ChannelName, State) ->
                                                             From ! {reply, Ref, Result},
                                                             loop(ChannelName, NewState);
         
-        % {change_nick, From, Ref, ClientPid, NickName}   ->  {NewState, Result} = handle_changeNick(State, ClientPid, NickName),
-        %                                                     From ! {reply, Ref, Result},
-        %                                                     loop(ChannelName, NewState);
+        {change_nick, From, Ref, ClientPid, NickName}   ->  {NewState, Result} = handle_changeNick(State, ClientPid, NickName),
+                                                            From ! {reply, Ref, Result},
+                                                            loop(ChannelName, NewState);
                                                 
         stop                                            ->  ok;
 
@@ -70,14 +70,14 @@ sendMessage(ChannelPid, ClientPid, Msg) ->
         {error, server_not_reached, "server not reached"}
     end.
 
-% changeNick(ChannelPid, ClientPid, NickName) ->
-%     Ref = make_ref(),
-%     ChannelPid ! {change_nick, self(), Ref, ClientPid, NickName},
-%     receive
-%         {reply, Ref, Result} -> Result
-%     after 3000 ->
-%         {error, server_not_reached, "server not reached"}
-%     end.
+changeNick(ChannelPid, ClientPid, NickName) ->
+    Ref = make_ref(),
+    ChannelPid ! {change_nick, self(), Ref, ClientPid, NickName},
+    receive
+        {reply, Ref, Result} -> Result
+    after 3000 ->
+        {error, server_not_reached, "server not reached"}
+    end.
 
 % ---------------------------------------------------------
 % handle functions:
@@ -121,12 +121,11 @@ broadcastMessage(State, ChannelName, ClientPid, Msg) ->
 
 
 
+handle_changeNick(State, ClientPid, NickName) -> 
+    case maps:is_key(ClientPid, State) of
+        true    ->  NewState = maps:put(ClientPid, NickName, State),
+                    {NewState, ok};
 
-% handle_changeNick(State, ClientPid, NickName) -> 
-%     case maps:is_key(ClientPid, State) of
-%         true    ->  NewState = maps:put(ClientPid, NickName, State),
-%                     {NewState, ok};
-
-%         false   ->  Result = {error, user_not_joined, "not in channel"},
-%                     {State, Result}
-%     end.
+        false   ->  Result = {error, user_not_joined, "not in channel"},
+                    {State, Result}
+    end.
