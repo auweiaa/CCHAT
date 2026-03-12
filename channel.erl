@@ -78,7 +78,7 @@ handle_join(State, ClientPid, NickName) ->
         true    ->  Result = {error, user_already_joined, "already joined"},
                     {State, Result};
                   
-        false   ->  NewState = maps:put(ClientPid, NickName, State), % alternative: State#{ClientPid => NickName};
+        false   ->  NewState = maps:put(ClientPid, NickName, State),
                     {NewState, ok}  
     end.
 
