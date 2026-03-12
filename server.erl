@@ -11,13 +11,13 @@ start(ServerAtom) ->
 % Stop the server process registered to the given name,
 % together with any other associated processes
 stop(ServerAtom) ->
-    genserver:request(ServerAtom, stop_channel_processes),
-    genserver:stop(ServerAtom),
+    _ = catch genserver:request(ServerAtom, stop_channel_processes),
+    _ = catch genserver:stop(ServerAtom),
     ok.
 
 
 % ---------------------------------------------------------
-% functions for client:
+% request functions for client:
 
 joinChannel(ServerAtom, ChannelName, ClientPid, NickName) ->
     genserver:request(ServerAtom, {join_channel, ChannelName, ClientPid, NickName}).
@@ -31,24 +31,24 @@ leaveChannel(ServerAtom, ChannelName, ClientPid) ->
 
 handler(State, {join_channel, ChannelName, ClientPid, NickName}) ->
     case maps:find(ChannelName, State) of
-        {ok, ChannelPid} -> Reply = channel:join(ChannelPid, ClientPid, NickName), % Reply = {ok, ChannelPid}
+        {ok, ChannelPid} -> Result = channel:join(ChannelPid, ClientPid, NickName), % Reply = ok or {error, errorAtom, ErrorString} -> replied to Client
+                            Reply = {Result, ChannelPid}, % return ChannelPid so Client can save
                             {reply, Reply, State};
 
         error            -> ChannelPid = channel:create(ChannelName),                        
-                            NewState = maps:put(ChannelName, ChannelPid, State), % alternative: NewState = State#{ChannelName => ChannelPid}  
-                            Reply = channel:join(ChannelPid, ClientPid, NickName), % Reply = {ok, ChannelPid}
+                            NewState = maps:put(ChannelName, ChannelPid, State),
+                            Result = channel:join(ChannelPid, ClientPid, NickName),
+                            Reply = {Result, ChannelPid}, % return ChannelPid so Client can save
                             {reply, Reply, NewState}
-
     end;
 
 handler(State, {leave_channel, ChannelName, ClientPid}) ->
     case maps:find(ChannelName, State) of
-        {ok, ChannelPid} -> Reply = channel:leave(ChannelPid, ClientPid),
+        {ok, ChannelPid} -> Reply = channel:leave(ChannelPid, ClientPid), % Reply = ok or {error, errorAtom, ErrorString} -> replied to Client
                             {reply, Reply, State};
 
-        error            -> Reply = {error, user_not_joined, "user not in channel"},
+        error            -> Reply = {error, user_not_joined, "channel not found"},
                             {reply, Reply, State}
-
     end;
 
 handler(State, stop_channel_processes) ->
