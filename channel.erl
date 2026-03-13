@@ -1,7 +1,7 @@
 -module(channel).
--export([create/1, join/3, leave/2, changeNick/3, sendMessage/3, closeChannel/1]).
+-export([create/1, join/3, leave/2, sendMessage/3, closeChannel/1]).
 
-
+% ---------------------------------------------------------
 % start and stop for server:
 
 create(ChannelName) -> 
@@ -28,24 +28,27 @@ loop(ChannelName, State) ->
                                                             From ! {reply, Ref, Result},
                                                             loop(ChannelName, NewState);
         
-        {change_nick, From, Ref, ClientPid, NickName}   ->  {NewState, Result} = handle_changeNick(State, ClientPid, NickName),
-                                                            From ! {reply, Ref, Result},
+        {change_nick, ClientPid, NickName}              ->  {NewState, _Result} = handle_changeNick(State, ClientPid, NickName),
                                                             loop(ChannelName, NewState);
                                                 
-        stop                                            -> ok;
+        stop                                            ->  ok;
 
-        _Other                                          ->  loop(ChannelName, State)
+        {result, _Ref, _Result}                         ->  loop(ChannelName, State); % ignore reply-messages after broadcasting
+
+        _Other                                          ->  loop(ChannelName, State) % unknown messages
     end.
 
 
 % ---------------------------------------------------------
-% functions for client:
+% request functions for client:
 
 join(ChannelPid, ClientPid, NickName) ->
     Ref = make_ref(),
     ChannelPid ! {join, self(), Ref, ClientPid, NickName},
     receive
         {reply, Ref, Result} -> Result
+    after 3000 ->
+        {error, server_not_reached, "server not reached"}
     end.
 
 leave(ChannelPid, ClientPid) ->
@@ -53,6 +56,8 @@ leave(ChannelPid, ClientPid) ->
     ChannelPid ! {leave, self(), Ref, ClientPid},
     receive
         {reply, Ref, Result} -> Result
+    after 3000 ->
+        {error, server_not_reached, "server not reached"}
     end.
 
 sendMessage(ChannelPid, ClientPid, Msg) -> 
@@ -60,14 +65,10 @@ sendMessage(ChannelPid, ClientPid, Msg) ->
     ChannelPid ! {msg, self(), Ref, ClientPid, Msg},
     receive
         {reply, Ref, Result} -> Result
+    after 3000 ->
+        {error, server_not_reached, "server not reached"}
     end.
 
-changeNick(ChannelPid, ClientPid, NickName) ->
-    Ref = make_ref(),
-    ChannelPid ! {change_nick, self(), Ref, ClientPid, NickName},
-    receive
-        {reply, Ref, Result} -> Result
-    end.
 
 % ---------------------------------------------------------
 % handle functions:
@@ -77,7 +78,7 @@ handle_join(State, ClientPid, NickName) ->
         true    ->  Result = {error, user_already_joined, "already joined"},
                     {State, Result};
                   
-        false   ->  NewState = maps:put(ClientPid, NickName, State), % alternative: State#{ClientPid => NickName};
+        false   ->  NewState = maps:put(ClientPid, NickName, State),
                     {NewState, ok}  
     end.
 
@@ -104,14 +105,16 @@ handle_message(State, ChannelName, ClientPid, Msg) ->
 broadcastMessage(State, ChannelName, ClientPid, Msg) ->
     SenderName = maps:get(ClientPid, State),
     Receivers = maps:remove(ClientPid, State), % remove the sending Client
-    maps:foreach(fun(ReceiverPid, _Name) -> ReceiverPid ! {message_receive, ChannelName, SenderName, Msg} end, Receivers).
+    maps:foreach(fun(ReceiverPid, _Name) ->
+        Ref = make_ref(),
+        ReceiverPid ! {request, self(), Ref, {message_receive, ChannelName, SenderName, Msg}}
+    end, Receivers).
+
 
 
 handle_changeNick(State, ClientPid, NickName) -> 
     case maps:is_key(ClientPid, State) of
         true    ->  NewState = maps:put(ClientPid, NickName, State),
                     {NewState, ok};
-
-        false   ->  Result = {error, user_not_joined, "not in channel"},
-                    {State, Result}
+        false   ->  {State, ok} % ignore the broadcast
     end.
